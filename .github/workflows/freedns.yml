@@ -1,0 +1,70 @@
+name: Update Fraidex Data
+
+on:
+  schedule:
+    - cron: "0 * * * *" # Runs every hour.
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+  push:
+    branches:
+      - main
+    paths:
+      - "parser.py"
+
+permissions:
+  contents: write # Required to push to the results branch
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml
+
+      - name: Generate fraidex.json
+        run: |
+          echo "Running parser.py..."
+          python parser.py
+          if [ ! -f "fraidex.json" ]; then
+            echo "Error: fraidex.json was not created!"
+            exit 1
+          fi
+          echo "fraidex.json created successfully."
+
+      - name: Publish to results branch
+        run: |
+          # 1. Move the generated file to a temporary location outside the git tree
+          mkdir -p ../temp_storage
+          mv fraidex.json ../temp_storage/
+
+          # 2. Configure Git identity
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 3. Create and switch to an orphan branch named 'results'
+          # Using --orphan creates a new branch with no parents.
+          git checkout --orphan results
+
+          # 4. Remove all files from the index and working directory
+          # This clears the slate completely, removing files tracked in 'main'.
+          git rm -rf .
+
+          # 5. Bring back the generated data file
+          mv ../temp_storage/fraidex.json .
+
+          # 6. Stage and commit the file
+          git add fraidex.json
+          git commit -m "Update data: $(date -u)"
+
+          # 7. Force push to the remote 'results' branch
+          # This overwrites the remote branch history, ensuring it only contains this single commit.
+          git push origin results --force
