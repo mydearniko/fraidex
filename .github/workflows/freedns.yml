@@ -49,7 +49,7 @@ jobs:
 
       - name: Publish to results branch
         run: |
-          # 1. Move the generated file to a safe location outside the git tree
+          # 1. Move the generated file to a temporary location outside the git tree
           mkdir -p ../temp_storage
           mv fraidex.json ../temp_storage/
 
@@ -57,24 +57,18 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 3. Switch to the existing results branch (or create it as orphan on first run)
-          git fetch origin results || true
-          if git ls-remote --exit-code --heads origin results > /dev/null 2>&1; then
-            git checkout results
-          else
-            git checkout --orphan results
-            git rm -rf . --quiet || true
-          fi
+          # 3. Create and switch to an orphan branch named 'results'
+          git checkout --orphan results
 
-          # 4. Remove everything except .git so only fraidex.json remains
-          find . -maxdepth 1 -not -name '.git' -not -name '.' | xargs rm -rf
+          # 4. Remove all files from the index and working directory
+          git rm -rf .
 
           # 5. Bring back the generated data file
           mv ../temp_storage/fraidex.json .
 
-          # 6. Stage and commit (skip if nothing changed)
+          # 6. Stage and commit the file
           git add fraidex.json
-          git diff --staged --quiet && echo "No changes to commit." || git commit -m "Update data: $(date -u)"
+          git commit -m "Update data: $(date -u)"
 
-          # 7. Push to the remote results branch
-          git push origin results
+          # 7. Force push — history is irrelevant; first_seen dates live inside the JSON
+          git push origin results --force
