@@ -10,6 +10,8 @@ import random # For jitter and random user agent selection
 
 BASE_URL = "https://freedns.afraid.org/domain/registry/"
 OUTPUT_JSON_FILE = os.path.join(os.path.dirname(__file__), "fraidex.json")
+# Previous run's data, fetched by the workflow before the parser runs
+PREVIOUS_JSON_FILE = os.path.join(os.path.dirname(__file__), "fraidex_previous.json")
 
 # --- List of User Agents ---
 USER_AGENTS = [
@@ -289,9 +291,32 @@ def process_html_content(page_num, html_content):
         print(f"Could not find the main data table on page {page_num}.")
     return page_data
 
+def load_previous_first_seen():
+    """Load first_seen dates from the previous fraidex.json run (keyed by domain_id)."""
+    if not os.path.exists(PREVIOUS_JSON_FILE):
+        print(f"No previous data file found at {PREVIOUS_JSON_FILE}. All domains will be marked as new.")
+        return {}
+    try:
+        with open(PREVIOUS_JSON_FILE, 'r', encoding='utf-8') as f:
+            prev_data = json.load(f)
+        seen_map = {}
+        for entry in prev_data:
+            did = entry.get('domain_id')
+            fs = entry.get('first_seen')
+            if did is not None and fs:
+                seen_map[did] = fs
+        print(f"Loaded {len(seen_map)} previously-seen domain records.")
+        return seen_map
+    except (IOError, json.JSONDecodeError) as e:
+        print(f"Warning: could not read previous data file: {e}")
+        return {}
+
+
 def main():
     start_time = time.time()
     all_domains_data = []
+    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+    previous_first_seen = load_previous_first_seen()
     
     with requests.Session() as session:
         print("Fetching page 1 to determine total pages...")
@@ -330,6 +355,17 @@ def main():
                     completed_count += 1
                     if completed_count % 20 == 0 or completed_count == total_tasks :
                          print(f"Fetched and processed {completed_count}/{total_tasks} pages...")
+    # Enrich each entry with first_seen / fraidex_age_days
+    for entry in all_domains_data:
+        did = entry.get('domain_id')
+        first_seen = previous_first_seen.get(did, today_str)
+        entry['first_seen'] = first_seen
+        try:
+            fs_date = datetime.strptime(first_seen, '%Y-%m-%d')
+            entry['fraidex_age_days'] = (datetime.utcnow() - fs_date).days
+        except ValueError:
+            entry['fraidex_age_days'] = 0
+
     try:
         with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
             json.dump(all_domains_data, f, indent=2, ensure_ascii=False)

@@ -85,6 +85,8 @@ interface FraidexDomainEntry {
   date_added: string | null
   age_days: number | null
   source_page_number: number
+  first_seen: string | null // ISO date of when fraidex first recorded this domain
+  fraidex_age_days: number | null // Days since first_seen
 }
 
 // Updated Domain interface for frontend use
@@ -101,6 +103,8 @@ interface Domain {
   ownerName?: string // Optional: from FraidexDomainEntry
   ownerId?: number // Optional: from FraidexDomainEntry
   dateAdded?: string | null // Optional: from FraidexDomainEntry
+  fraidexFirstSeen?: string | null // ISO date fraidex first saw this domain
+  fraidexAgeDays: number // Days since fraidex first recorded this domain
 }
 
 interface NumericFilter {
@@ -464,6 +468,8 @@ export default function Component() {
             ownerName: entry.owner_name,
             ownerId: entry.owner_id,
             dateAdded: entry.date_added,
+            fraidexFirstSeen: entry.first_seen ?? null,
+            fraidexAgeDays: entry.fraidex_age_days ?? 0,
           }
         })
         setAllDomains(processedDomains)
@@ -902,6 +908,9 @@ export default function Component() {
                             {filters.sortBy === "ageInDays" && (
                               <Clock className="w-4 h-4" />
                             )}
+                            {filters.sortBy === "fraidexAgeDays" && (
+                              <Eye className="w-4 h-4" />
+                            )}
                             {filters.sortBy === "name" && (
                               <Globe className="w-4 h-4" />
                             )}
@@ -914,6 +923,8 @@ export default function Component() {
                             <span>
                               {filters.sortBy === "hosts" && "Host Count"}
                               {filters.sortBy === "ageInDays" && "Domain Age"}
+                              {filters.sortBy === "fraidexAgeDays" &&
+                                "In Fraidex"}
                               {filters.sortBy === "name" && "Domain Name"}
                               {filters.sortBy === "length" && "Domain Length"}
                               {filters.sortBy === "status" && "Status"}
@@ -967,6 +978,18 @@ export default function Component() {
                                 <Ruler className="w-4 h-4" />
                                 Domain Length
                                 {filters.sortBy === "length" && (
+                                  <div className="ml-auto w-2 h-2 bg-primary rounded-full" />
+                                )}
+                              </CommandItem>
+                              <CommandItem
+                                onSelect={() =>
+                                  updateFilter("sortBy", "fraidexAgeDays")
+                                }
+                                className="flex items-center gap-2"
+                              >
+                                <Eye className="w-4 h-4" />
+                                In Fraidex
+                                {filters.sortBy === "fraidexAgeDays" && (
                                   <div className="ml-auto w-2 h-2 bg-primary rounded-full" />
                                 )}
                               </CommandItem>
@@ -1040,6 +1063,12 @@ export default function Component() {
                             Age
                           </div>
                         </TableHead>
+                        <TableHead className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Eye className="w-4 h-4" />
+                            In Fraidex
+                          </div>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1109,12 +1138,20 @@ export default function Component() {
                               {formatAge(domain.ageInDays)}
                             </div>
                           </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Eye className="w-4 h-4 text-muted-foreground" />
+                              {domain.fraidexAgeDays > 0
+                                ? formatAge(domain.fraidexAgeDays)
+                                : "New"}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                       {paginatedDomains.length === 0 && (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
+                            colSpan={5}
                             className="text-center py-10 text-muted-foreground"
                           >
                             No domains found matching your criteria.
